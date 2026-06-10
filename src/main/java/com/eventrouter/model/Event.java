@@ -2,6 +2,8 @@ package com.eventrouter.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,8 +14,8 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Event
-{
+public class Event {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(updatable = false, nullable = false)
@@ -22,12 +24,12 @@ public class Event
     @Column(name = "event_type", nullable = false)
     private String eventType;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", columnDefinition = "jsonb",
             nullable = false)
     private String payload;
 
-    @Column(name = "risk_score",
-            precision = 3, scale = 2)
+    @Column(name = "risk_score", precision = 3, scale = 2)
     private BigDecimal riskScore;
 
     @Column(name = "anomaly_flag")
@@ -52,8 +54,7 @@ public class Event
     private LocalDateTime processedAt;
 
     @PrePersist
-    public void prePersist()
-    {
+    public void prePersist() {
         this.receivedAt = LocalDateTime.now();
         this.status = "received";
     }
