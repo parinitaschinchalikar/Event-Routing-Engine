@@ -21,6 +21,7 @@ public class EventConsumerService {
     private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
     private final LlmEnrichmentService llmEnrichmentService;
+    private final RoutingService routingService;
 
     @KafkaListener(
             topics = "${kafka.topic.raw}",
@@ -64,7 +65,7 @@ public class EventConsumerService {
                             payload.getEventType(),
                             record.value());
 
-            // Step 4 — Update event with enrichment
+            // Step 4 — Update with enrichment
             event.setRiskScore(enrichment.getRiskScore());
             event.setAnomalyFlag(enrichment.getAnomalyFlag());
             event.setRecommendedAction(
@@ -79,6 +80,10 @@ public class EventConsumerService {
                     enrichment.getRiskScore(),
                     enrichment.getAnomalyFlag(),
                     enrichment.getRecommendedAction());
+
+            // Step 5 — Route event
+            log.info("Routing event...");
+            routingService.routeEvent(event);
 
         } catch (Exception e) {
             log.error("Failed to process event: key={}" +
