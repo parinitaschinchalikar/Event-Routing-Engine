@@ -22,6 +22,7 @@ public class EventConsumerService {
     private final ObjectMapper objectMapper;
     private final LlmEnrichmentService llmEnrichmentService;
     private final RoutingService routingService;
+    private final DeadLetterService deadLetterService;
 
     @KafkaListener(
             topics = "${kafka.topic.raw}",
@@ -37,10 +38,13 @@ public class EventConsumerService {
                 record.partition(),
                 record.offset());
 
+        String eventType = "unknown";
+
         try {
             // Step 1 — Parse payload
             EventPayload payload = objectMapper.readValue(
                     record.value(), EventPayload.class);
+            eventType = payload.getEventType();
 
             log.info("Parsed event: type={} source={}",
                     payload.getEventType(),
@@ -54,18 +58,12 @@ public class EventConsumerService {
                     .build();
             eventRepository.save(event);
 
-            log.info("Event saved: id={} type={}",
-                    event.getId(),
-                    event.getEventType());
-
             // Step 3 — Enrich with LLM
-            log.info("Enriching event with LLM...");
             EnrichmentResult enrichment =
                     llmEnrichmentService.enrichEvent(
                             payload.getEventType(),
                             record.value());
 
-            // Step 4 — Update with enrichment
             event.setRiskScore(enrichment.getRiskScore());
             event.setAnomalyFlag(enrichment.getAnomalyFlag());
             event.setRecommendedAction(
@@ -81,15 +79,20 @@ public class EventConsumerService {
                     enrichment.getAnomalyFlag(),
                     enrichment.getRecommendedAction());
 
-            // Step 5 — Route event
-            log.info("Routing event...");
+            // Step 4 — Route event
             routingService.routeEvent(event);
 
         } catch (Exception e) {
             log.error("Failed to process event: key={}" +
-                            " error={}",
+                            " error={} — sending to DLQ",
+                    record.key(), e.getMessage());
+
+            // Send failed event to dead letter queue
+            deadLetterService.sendToDeadLetter(
                     record.key(),
-                    e.getMessage(), e);
+                    eventType,
+                    record.value(),
+                    e.getMessage());
         }
     }
 }
